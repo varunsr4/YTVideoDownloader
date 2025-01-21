@@ -1,6 +1,6 @@
 # C-SPAN Videos featuring Trump on YouTube - Scraper & Processor
 
-This project downloads and processes CSPAN videos from YouTube.com containing appearances of Donald Trump, automatically detecting and extracting segments where his facce appears.
+This project downloads and processes CSPAN videos from YouTube.com containing appearances of Donald Trump, automatically detecting and extracting segments where his face appears.
 
 ## Project Structure
 
