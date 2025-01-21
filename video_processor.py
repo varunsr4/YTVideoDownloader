@@ -53,27 +53,41 @@ def detect_trump_timestamps(video_path, trump_encoding):
         try:
             # Use 'hog' model for better performance at cost of accuracy
             face_locations = face_recognition.face_locations(small_frame, model="hog")
-            if face_locations:
-                print(f"Found {len(face_locations)} faces in frame {frame_number}")
+
+            # Only process frames where exactly one face is detected
+            if len(face_locations) == 1:
                 face_encodings = face_recognition.face_encodings(small_frame, face_locations)
 
-                for encoding in face_encodings:
-                    # Slightly increase tolerance for better performance (standard 0.7)
-                    matches = face_recognition.compare_faces([trump_encoding], encoding, tolerance=0.65)
-                    if matches[0]:
+                # Check if the single face is Trump
+                matches = face_recognition.compare_faces([trump_encoding], face_encodings[0], tolerance=0.65)
+                if matches[0]:
+                    # Get face dimensions to ensure it's prominent in the frame
+                    top, right, bottom, left = face_locations[0]
+                    face_height = bottom - top
+                    face_width = right - left
+                    frame_height, frame_width = small_frame.shape[:2]
+
+                    # Calculate face size relative to frame (as percentage)
+                    face_size_percentage = (face_height * face_width) / (frame_height * frame_width) * 100
+
+                    # Only include if face is reasonably prominent (at least 2% of frame)
+                    if face_size_percentage >= 2:
                         timestamp = frame_number / fps
                         timestamps.append(timestamp)
-                        print(f"Found Trump at {timestamp:.2f} seconds")
-                        break
+                        print(f"Found solo Trump at {timestamp:.2f} seconds (face size: {face_size_percentage:.1f}%)")
+            else:
+                if face_locations:
+                    print(f"Skipping frame {frame_number} - found {len(face_locations)} faces")
+
         except Exception as e:
             print(f"Error processing frame {frame_number}: {e}")
 
         frame_number += 1
         if frame_number % int(fps * sample_rate * 5) == 0:
-            print(f"Progress: {frame_number / total_frames * 100:.1f}% ({len(timestamps)} Trump appearances)")
+            print(f"Progress: {frame_number / total_frames * 100:.1f}% ({len(timestamps)} solo Trump appearances)")
 
     video.release()
-    print(f"Finished processing {frames_processed} frames, found Trump in {len(timestamps)} frames")
+    print(f"Finished processing {frames_processed} frames, found Trump alone in {len(timestamps)} frames")
     return timestamps
 
 
@@ -87,9 +101,9 @@ def trim_video(input_path, output_path, ranges):
         # Create a filter complex for direct concatenation
         filter_complex = ""
         inputs = ""
-        
+
         for i, (start, end) in enumerate(ranges):
-            inputs += f" -ss {start} -t {end-start} -i \"{input_path}\""
+            inputs += f" -ss {start} -t {end - start} -i \"{input_path}\""
             filter_complex += f"[{i}:v][{i}:a]"
 
         # Single FFmpeg command that handles all segments at once
@@ -97,7 +111,7 @@ def trim_video(input_path, output_path, ranges):
         filter_complex += f"concat=n={len(ranges)}:v=1:a=1[outv][outa];[outv]scale=-2:720[vout]"
         concat_str = f"ffmpeg {inputs} -filter_complex \"{filter_complex}\" "
         concat_str += f"-map \"[vout]\" -map \"[outa]\" -c:v h264_videotoolbox -b:v 2M -c:a aac \"{output_path}\" -loglevel error"
-        
+
         print("Processing segments...")
         os.system(concat_str)
         return True
